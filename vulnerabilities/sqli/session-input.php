@@ -9,9 +9,9 @@ $page = dvwaPageNewGrab();
 $page[ 'title' ] = 'SQL Injection Session Input' . $page[ 'title_separator' ].$page[ 'title' ];
 
 if( isset( $_POST[ 'id' ] ) ) {
-	$_SESSION[ 'id' ] =  $_POST[ 'id' ];
+	$_SESSION[ 'id' ] =  (string) $_POST[ 'id' ];
 	//$page[ 'body' ] .= "Session ID set!<br /><br /><br />";
-	$page[ 'body' ] .= "Session ID: {$_SESSION[ 'id' ]}<br /><br /><br />";
+	$page[ 'body' ] .= "Session ID: " . htmlspecialchars( $_SESSION[ 'id' ], ENT_QUOTES, 'UTF-8' ) . "<br /><br /><br />";
 	$page[ 'body' ] .= "<script>window.opener.location.reload(true);</script>";
 }
 

@@ -62,14 +62,16 @@ if ($log_result && mysqli_num_rows($log_result) > 0) {
     $html .= "<tr><th>ID</th><th>Accessor</th><th>Target</th><th>IP Address</th><th>Timestamp</th></tr>";
 
     while ($log = mysqli_fetch_assoc($log_result)) {
+        // Log entries contain client supplied data, encode everything on output
+        $e = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
         $target_user = $log['target_user'] ? $log['target_user'] : 'Non-existent User (ID: ' . $log['target_id'] . ')';
 
         $html .= "<tr>";
-        $html .= "<td>{$log['id']}</td>";
-        $html .= "<td>{$log['accessor_user']} (ID: {$log['user_id']})</td>";
-        $html .= "<td>{$target_user}</td>";
-        $html .= "<td>{$log['ip_address']}</td>";
-        $html .= "<td>{$log['timestamp']}</td>";
+        $html .= "<td>" . $e($log['id']) . "</td>";
+        $html .= "<td>" . $e($log['accessor_user']) . " (ID: " . $e($log['user_id']) . ")</td>";
+        $html .= "<td>" . $e($target_user) . "</td>";
+        $html .= "<td>" . $e($log['ip_address']) . "</td>";
+        $html .= "<td>" . $e($log['timestamp']) . "</td>";
         $html .= "</tr>";
     }
 

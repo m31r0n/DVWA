@@ -1,62 +1,53 @@
 <?php
 
+/*
+ * SQL Injection (Blind) - patched.
+ *
+ * The user ID must be a plain integer and is passed to the database as a bound
+ * parameter, so attacker supplied boolean/time conditions are never evaluated
+ * by the database and there is no oracle left to query.
+ */
+
 if( isset( $_COOKIE[ 'id' ] ) ) {
-	// Get input
+	// Get input (set through cookie-input.php)
 	$id = $_COOKIE[ 'id' ];
 	$exists = false;
 
-	switch ($_DVWA['SQLI_DB']) {
-		case MYSQL:
-			// Check database
-			$query  = "SELECT first_name, last_name FROM users WHERE user_id = '$id' LIMIT 1;";
-			try {
-				$result = mysqli_query($GLOBALS["___mysqli_ston"],  $query ); // Removed 'or die' to suppress mysql errors
-			} catch (Exception $e) {
-				$result = false;
-			}
+	// Was a number entered?
+	if( is_string( $id ) && preg_match( '/^\d{1,10}$/', $id ) ) {
+		$id = intval( $id );
 
-			$exists = false;
-			if ($result !== false) {
-				// Get results
-				try {
-					$exists = (mysqli_num_rows( $result ) > 0); // The '@' character suppresses errors
-				} catch(Exception $e) {
-					$exists = false;
-				}
-			}
+		switch ($_DVWA['SQLI_DB']) {
+			case MYSQL:
+				$data = $db->prepare( 'SELECT first_name, last_name FROM users WHERE user_id = (:id) LIMIT 1;' );
+				$data->bindParam( ':id', $id, PDO::PARAM_INT );
+				$data->execute();
+				$exists = ( $data->rowCount() > 0 );
+				break;
+			case SQLITE:
+				global $sqlite_db_connection;
 
-			((is_null($___mysqli_res = mysqli_close($GLOBALS["___mysqli_ston"]))) ? false : $___mysqli_res);
-			break;
-		case SQLITE:
-			global $sqlite_db_connection;
-
-			$query  = "SELECT first_name, last_name FROM users WHERE user_id = '$id' LIMIT 1;";
-			try {
-				$results = $sqlite_db_connection->query($query);
-				$row = $results->fetchArray();
-				$exists = $row !== false;
-			} catch(Exception $e) {
-				$exists = false;
-			}
-
-			break;
-	}
-
-	if ($exists) {
-		// Feedback for end user
-		$html .= '<pre>User ID exists in the database.</pre>';
-	}
-	else {
-		// Might sleep a random amount
-		if( rand( 0, 5 ) == 3 ) {
-			sleep( rand( 2, 4 ) );
+				$stmt = $sqlite_db_connection->prepare( 'SELECT first_name, last_name FROM users WHERE user_id = :id LIMIT 1;' );
+				$stmt->bindValue( ':id', $id, SQLITE3_INTEGER );
+				$results = $stmt->execute();
+				$exists = ( $results !== false ) && ( $results->fetchArray() !== false );
+				break;
 		}
 
-		// User wasn't found, so the page wasn't!
-		header( $_SERVER[ 'SERVER_PROTOCOL' ] . ' 404 Not Found' );
+		if ($exists) {
+			// Feedback for end user
+			$html .= '<pre>User ID exists in the database.</pre>';
+		} else {
+			// User wasn't found, so the page wasn't!
+			header( $_SERVER[ 'SERVER_PROTOCOL' ] . ' 404 Not Found' );
 
-		// Feedback for end user
-		$html .= '<pre>User ID is MISSING from the database.</pre>';
+			// Feedback for end user
+			$html .= '<pre>User ID is MISSING from the database.</pre>';
+		}
+	}
+	else {
+		// Input validation error - the database is not queried at all
+		$html .= '<pre>The User ID must be a number.</pre>';
 	}
 }
 

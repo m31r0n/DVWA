@@ -31,11 +31,9 @@ switch( dvwaSecurityLevelGet() ) {
 
 require_once DVWA_WEB_PAGE_TO_ROOT . "vulnerabilities/xss_d/source/{$vulnerabilityFile}";
 
-# For the impossible level, don't decode the querystring
-$decodeURI = "decodeURI";
-if ($vulnerabilityFile == 'impossible.php') {
-	$decodeURI = "";
-}
+# The language chosen by the user is only ever handled as data: it is read
+# with URLSearchParams and inserted with textContent / value, never written
+# into the document as HTML (no document.write, no decoding into markup).
 
 $page[ 'body' ] = <<<EOF
 <div class="body_padded">
@@ -46,22 +44,35 @@ $page[ 'body' ] = <<<EOF
  		<p>Please choose a language:</p>
 
 		<form name="XSS" method="GET">
-			<select name="default">
-				<script>
-					if (document.location.href.indexOf("default=") >= 0) {
-						var lang = document.location.href.substring(document.location.href.indexOf("default=")+8);
-						document.write("<option value='" + lang + "'>" + $decodeURI(lang) + "</option>");
-						document.write("<option value='' disabled='disabled'>----</option>");
-					}
-					    
-					document.write("<option value='English'>English</option>");
-					document.write("<option value='French'>French</option>");
-					document.write("<option value='Spanish'>Spanish</option>");
-					document.write("<option value='German'>German</option>");
-				</script>
+			<select name="default" id="xss_d_default">
+				<option value='English'>English</option>
+				<option value='French'>French</option>
+				<option value='Spanish'>Spanish</option>
+				<option value='German'>German</option>
 			</select>
 			<input type="submit" value="Select" />
 		</form>
+		<script>
+			(function () {
+				var lang = new URLSearchParams(window.location.search).get("default");
+				if (lang === null) {
+					return;
+				}
+				var select = document.getElementById("xss_d_default");
+
+				var separator = document.createElement("option");
+				separator.value = "";
+				separator.disabled = true;
+				separator.textContent = "----";
+				select.insertBefore(separator, select.firstChild);
+
+				var chosen = document.createElement("option");
+				chosen.value = lang;
+				chosen.textContent = lang;
+				select.insertBefore(chosen, select.firstChild);
+				select.selectedIndex = 0;
+			})();
+		</script>
 	</div>
 EOF;
 

@@ -36,24 +36,15 @@ final class User
 	}
 
 	public function toArray($version) {
-		switch ($version) {
-			case 1:
-				$a = array (
-					"id" => $this->id,
-					"name" => $this->name,
-					"level" => $this->level,
-					"password" => $this->password,
-				);
-				break;
-			default:
-			case 2:
-				$a = array (
-					"id" => $this->id,
-					"name" => $this->name,
-					"level" => $this->level,
-				);
-				break;
-		}
+		// The password hash is never part of the public representation of a
+		// user, whatever the API version. The deprecated v1 schema used to
+		// expose it (excessive data exposure); it now returns the same safe
+		// fields as v2.
+		$a = array (
+			"id" => $this->id,
+			"name" => $this->name,
+			"level" => $this->level,
+		);
 
 		return $a;
 	}

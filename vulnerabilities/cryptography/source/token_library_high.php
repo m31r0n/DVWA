@@ -1,29 +1,56 @@
 <?php
 
-define ("KEY", "rainbowclimbinghigh");
-define ("ALGO", "aes-128-cbc");
-define ("IV", "1234567812345678");
+/*
+ * Cryptography - patched.
+ *
+ * The tokens used AES-128-CBC with a hard-coded key and a fixed IV, both
+ * visible in the source, so anybody could mint a token for any user (and the
+ * unauthenticated CBC mode also allowed padding oracle / bit flipping attacks).
+ *
+ * Tokens now use AES-256-GCM (authenticated encryption) with a random IV per
+ * token and a secret key that is not in the source code (DVWA_CRYPTO_SECRET,
+ * or a random per-session secret). Forged or modified tokens fail the
+ * authentication tag check and are rejected.
+ */
+
+define ("ALGO", "aes-256-gcm");
+
+function token_high_key () {
+	$secret = getenv ('DVWA_CRYPTO_SECRET');
+	if ($secret === false || $secret === '') {
+		if (session_status () !== PHP_SESSION_ACTIVE) {
+			@session_start ();
+		}
+		if (!isset ($_SESSION['dvwa_crypto_secret'])) {
+			$_SESSION['dvwa_crypto_secret'] = bin2hex (random_bytes (32));
+		}
+		$secret = $_SESSION['dvwa_crypto_secret'];
+	}
+	return hash_hmac ('sha256', 'dvwa-crypto-high:tokens', $secret, true);
+}
 
 function encrypt ($plaintext, $iv) {
-	# Default padding is PKCS#7 which is interchangeable with PKCS#5
-	# https://en.wikipedia.org/wiki/Padding_%28cryptography%29#PKCS#5_and_PKCS#7
-
-	if (strlen ($iv) != 16) {
-		throw new Exception ("IV must be 16 bytes, " . strlen ($iv) . " passed");
+	if (strlen ($iv) != 12) {
+		throw new Exception ("IV must be 12 bytes, " . strlen ($iv) . " passed");
 	}
 	$tag = "";
-	$e = openssl_encrypt($plaintext, ALGO, KEY, OPENSSL_RAW_DATA, $iv, $tag);
+	$e = openssl_encrypt($plaintext, ALGO, token_high_key (), OPENSSL_RAW_DATA, $iv, $tag);
 	if ($e === false) {
 		throw new Exception ("Encryption failed");
 	}
-	return $e;
+	return $e . $tag;
 }
 
 function decrypt ($ciphertext, $iv) {
-	if (strlen ($iv) != 16) {
-		throw new Exception ("IV must be 16 bytes, " . strlen ($iv) . " passed");
+	if (strlen ($iv) != 12) {
+		throw new Exception ("IV must be 12 bytes, " . strlen ($iv) . " passed");
 	}
-	$e = openssl_decrypt($ciphertext, ALGO, KEY, OPENSSL_RAW_DATA, $iv);
+	if (strlen ($ciphertext) < 17) {
+		throw new Exception ("Token too short");
+	}
+	$tag = substr ($ciphertext, -16);
+	$text = substr ($ciphertext, 0, -16);
+	$e = openssl_decrypt($text, ALGO, token_high_key (), OPENSSL_RAW_DATA, $iv, $tag);
 	if ($e === false) {
 		throw new Exception ("Decryption failed");
 	}
@@ -35,17 +62,17 @@ function decrypt ($ciphertext, $iv) {
 
 function create_token ($debug = false) {
 	$token = "userid:2";
+	$iv = random_bytes (12);
 
 	if ($debug) {
 		print "Clear text token: " . $token . "\n";
-		print "Encryption key: " . KEY . "\n";
-		print "IV: " . (IV) . "\n";
+		print "IV: " . bin2hex ($iv) . "\n";
 	}
 
-	$e = encrypt ($token, IV);
+	$e = encrypt ($token, $iv);
 	$data = array (
 					"token" => base64_encode ($e),
-					"iv" => base64_encode (IV)
+					"iv" => base64_encode ($iv)
 				);
 	return json_encode($data);
 }

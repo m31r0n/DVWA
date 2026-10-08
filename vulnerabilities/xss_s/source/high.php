@@ -1,24 +1,34 @@
 <?php
 
+/*
+ * Stored XSS - patched.
+ *
+ * Guestbook entries are stored with a parameterised query and are HTML encoded
+ * when they are rendered (see dvwaGuestbook() in dvwaPage.inc.php), so neither
+ * the name nor the message can ever be interpreted as markup - whatever tag,
+ * case or event handler is used.
+ */
+
 if( isset( $_POST[ 'btnSign' ] ) ) {
 	// Get input
-	$message = trim( $_POST[ 'mtxMessage' ] );
-	$name    = trim( $_POST[ 'txtName' ] );
+	$message = isset( $_POST[ 'mtxMessage' ] ) ? trim( (string) $_POST[ 'mtxMessage' ] ) : '';
+	$name    = isset( $_POST[ 'txtName' ] ) ? trim( (string) $_POST[ 'txtName' ] ) : '';
 
-	// Sanitize message input
-	$message = strip_tags( addslashes( $message ) );
-	$message = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $message ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
-	$message = htmlspecialchars( $message );
-
-	// Sanitize name input
-	$name = preg_replace( '/<(.*)s(.*)c(.*)r(.*)i(.*)p(.*)t/i', '', $name );
-	$name = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $name ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
+	// Keep the values within the size of the database columns
+	if( function_exists( 'mb_substr' ) ) {
+		$message = mb_substr( $message, 0, 300, 'UTF-8' );
+		$name    = mb_substr( $name, 0, 100, 'UTF-8' );
+	}
+	else {
+		$message = substr( $message, 0, 300 );
+		$name    = substr( $name, 0, 100 );
+	}
 
 	// Update database
-	$query  = "INSERT INTO guestbook ( comment, name ) VALUES ( '$message', '$name' );";
-	$result = mysqli_query($GLOBALS["___mysqli_ston"],  $query ) or die( '<pre>' . ((is_object($GLOBALS["___mysqli_ston"])) ? mysqli_error($GLOBALS["___mysqli_ston"]) : (($___mysqli_res = mysqli_connect_error()) ? $___mysqli_res : false)) . '</pre>' );
-
-	//mysql_close();
+	$data = $db->prepare( 'INSERT INTO guestbook ( comment, name ) VALUES ( :message, :name );' );
+	$data->bindParam( ':message', $message, PDO::PARAM_STR );
+	$data->bindParam( ':name', $name, PDO::PARAM_STR );
+	$data->execute();
 }
 
 ?>

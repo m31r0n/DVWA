@@ -1,11 +1,18 @@
 <?php
 /*
 
-Nothing to see here for this vulnerability, have a look
-instead at the dvwaHtmlEcho function in:
+Only the admin user is allowed to access this page. Hiding the menu entry
+(see dvwaHtmlEcho in dvwa/includes/dvwaPage.inc.php) is not access control,
+so the page itself checks the user, and so do the endpoints it calls:
 
-* dvwa/includes/dvwaPage.inc.php
+* vulnerabilities/authbypass/get_user_data.php
+* vulnerabilities/authbypass/change_user_details.php
 
 */
 
+if (dvwaCurrentUser() != "admin") {
+	http_response_code(403);
+	print "Unauthorised";
+	exit;
+}
 ?>

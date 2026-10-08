@@ -164,7 +164,9 @@ class UserController
 			$gc->processRequest();
 			exit();
 		}
-		$user = new User(null, $input['name'], intval ($input['level']), hash ("sha256", "password"));
+		// Privileged levels (0 = admin) can not be self-assigned through the API
+		$level = max (1, intval ($input['level']));
+		$user = new User(null, $input['name'], $level, hash ("sha256", "password"));
 		$this->data[] = $user;
 		$response['status_code_header'] = 'HTTP/1.1 201 Created';
 		$response['body'] = json_encode($user->toArray($this->version));
@@ -218,11 +220,10 @@ class UserController
 			$gc->processRequest();
 			exit();
 		}
+		// Only the fields a user is allowed to change are copied from the
+		// request (no mass assignment): "level" is privileged and ignored.
 		if (array_key_exists ("name", $input)) {
-			$this->data[$id]->name = $input['name'];
-		}
-		if (array_key_exists ("level", $input)) {
-			$this->data[$id]->level = intval ($input['level']);
+			$this->data[$id]->name = (string) $input['name'];
 		}
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));

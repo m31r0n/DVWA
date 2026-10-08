@@ -1,13 +1,62 @@
 <?php
-function decrypt ($ciphertext, $key) {
-	$e = openssl_decrypt($ciphertext, 'aes-128-ecb', $key, OPENSSL_PKCS1_PADDING);
+
+/*
+ * Cryptography - patched.
+ *
+ * ECB encrypts every 16 byte block independently, so blocks from different
+ * tokens can be cut and pasted into a new valid token, and with a hard-coded
+ * key anybody can simply mint their own token.
+ *
+ * Tokens are now encrypted with AES-256-GCM: a random IV per token and an
+ * authentication tag, so any modified, spliced or forged token is rejected.
+ * The key is not in the source code (DVWA_CRYPTO_SECRET, or a random
+ * per-session secret), which also invalidates every token issued with the old
+ * leaked key.
+ */
+
+function crypto_medium_key () {
+	$secret = getenv ('DVWA_CRYPTO_SECRET');
+	if ($secret === false || $secret === '') {
+		if (!isset ($_SESSION['dvwa_crypto_secret'])) {
+			$_SESSION['dvwa_crypto_secret'] = bin2hex (random_bytes (32));
+		}
+		$secret = $_SESSION['dvwa_crypto_secret'];
+	}
+	return hash_hmac ('sha256', 'dvwa-crypto-medium:tokens', $secret, true);
+}
+
+function encrypt ($cleartext, $key) {
+	$iv = random_bytes (12);
+	$tag = '';
+	$e = openssl_encrypt ($cleartext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+	if ($e === false) {
+		throw new Exception ("Encryption failed");
+	}
+	return $iv . $e . $tag;
+}
+
+function decrypt ($token, $key) {
+	if (strlen ($token) < 29) {
+		throw new Exception ("Token is in wrong format");
+	}
+	$iv = substr ($token, 0, 12);
+	$tag = substr ($token, -16);
+	$ciphertext = substr ($token, 12, -16);
+	$e = openssl_decrypt ($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
 	if ($e === false) {
 		throw new Exception ("Decryption failed");
 	}
 	return $e;
 }
 
-$key = "ik ben een aardbei";
+$key = crypto_medium_key ();
+
+// The captured tokens, as issued by the fixed application
+$captured_tokens = array (
+	"sooty" => bin2hex (encrypt ('{"user":"sooty","ex":1723620672,"level":"admin","bio":"Izzy wizzy let' . "'" . 's get busy"}', $key)),
+	"sweep" => bin2hex (encrypt ('{"user":"sweep","ex":1723620672,"level": "user","bio": "Squeeeeek"}', $key)),
+	"soo"   => bin2hex (encrypt ('{"user" : "soo","ex":1823620672,"level": "user","bio": "I won The Weakest Link"}', $key)),
+);
 
 $errors = "";
 $success = "";
@@ -18,14 +67,14 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 		if (!array_key_exists ('token', $_POST)) {
 			throw new Exception ("No token passed");
 		} else {
-			$token = $_POST['token'];
-			if (strlen($token) % 32 != 0) {
+			$token = is_string ($_POST['token']) ? trim ($_POST['token']) : '';
+			if (!ctype_xdigit ($token) || strlen ($token) % 2 != 0) {
 				throw new Exception ("Token is in wrong format");
 			} else {
 				$decrypted = decrypt(hex2bin ($token), $key);
 
 				$user = json_decode ($decrypted);
-				if ($user === null) {
+				if (!is_object ($user) || !isset ($user->user, $user->ex, $user->level)) {
 					throw new Exception ("Could not decode JSON object.");
 				}
 
@@ -49,19 +98,19 @@ $html = "
 		<strong>Sooty (admin), session expired</strong>
 		</p>
 		<p>
-<textarea style='width: 600px; height: 56px'>e287af752ed3f9601befd45726785bd9b85bb230876912bf3c66e50758b222d0837d1e6b16bfae07b776feb7afe576305aec34b41499579d3fb6acc8dc92fd5fcea8743c3b2904de83944d6b19733cdb48dd16048ed89967c250ab7f00629dba</textarea>
+<textarea style='width: 600px; height: 56px'>" . $captured_tokens['sooty'] . "</textarea>
 		</p>
 		<p>
 		<strong>Sweep (user), session expired</strong>
 		</p>
 		<p>
-<textarea style='width: 600px; height: 56px'>3061837c4f9debaf19d4539bfa0074c1b85bb230876912bf3c66e50758b222d083f2d277d9e5fb9a951e74bee57c77a3caeb574f10f349ed839fbfd223903368873580b2e3e494ace1e9e8035f0e7e07</textarea>
+<textarea style='width: 600px; height: 56px'>" . $captured_tokens['sweep'] . "</textarea>
 		</p>
 		<p>
 		<strong>Soo (user), session valid</strong>
 		</p>
 		<p>
-<textarea style='width: 600px; height: 56px'>5fec0b1c993f46c8bad8a5c8d9bb9698174d4b2659239bbc50646e14a70becef83f2d277d9e5fb9a951e74bee57c77a3c9acb1f268c06c5e760a9d728e081fab65e83b9f97e65cb7c7c4b8427bd44abc16daa00fd8cd0105c97449185be77ef5</textarea>
+<textarea style='width: 600px; height: 56px'>" . $captured_tokens['soo'] . "</textarea>
 		</p>
 		<p>
 		Based on the documentation, you know the format of the token is:
@@ -76,7 +125,7 @@ $html = "
 You also spot this comment in the docs:
 </p>
 <blockquote><i>
-To ensure your security, we use aes-128-ecb throughout our application.
+To ensure your security, we use authenticated encryption (aes-256-gcm) throughout our application.
 </i></blockquote>
 
 		<hr>
@@ -85,7 +134,7 @@ To ensure your security, we use aes-128-ecb throughout our application.
 ";
 
 if ($errors != "") {
-	$html .= '<div class="warning">' . $errors . '</div>';
+	$html .= '<div class="warning">' . htmlentities ($errors) . '</div>';
 }
 
 if ($messages != "") {

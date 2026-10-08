@@ -1,14 +1,24 @@
 <?php
 
+/*
+ * Weak Session IDs - patched.
+ *
+ * Session identifiers must be unguessable: no counters, no timestamps, no
+ * hashes of predictable values. The value is 160 bits from a CSPRNG and the
+ * cookie is flagged HttpOnly / SameSite (and Secure when served over HTTPS).
+ */
+
 $html = "";
 
 if ($_SERVER['REQUEST_METHOD'] == "POST") {
-	if (!isset ($_SESSION['last_session_id_high'])) {
-		$_SESSION['last_session_id_high'] = 0;
-	}
-	$_SESSION['last_session_id_high']++;
-	$cookie_value = md5($_SESSION['last_session_id_high']);
-	setcookie("dvwaSession", $cookie_value, time()+3600, "/vulnerabilities/weak_id/", $_SERVER['HTTP_HOST'], false, false);
+	$cookie_value = bin2hex(random_bytes(20));
+	$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+	setcookie("dvwaSession", $cookie_value, array(
+		'expires'  => time() + 3600,
+		'path'     => '/vulnerabilities/weak_id/',
+		'secure'   => $is_https,
+		'httponly' => true,
+		'samesite' => 'Strict',
+	));
 }
-
 ?>

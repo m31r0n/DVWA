@@ -1,13 +1,20 @@
 <?php
-$headerCSP = "Content-Security-Policy: script-src 'self';";
+/*
+ * CSP Bypass - patched.
+ *
+ * User input is HTML encoded so it cannot inject markup, and the JSONP
+ * endpoint (jsonp.php) only accepts the one callback this page uses, so it
+ * can no longer be abused to run attacker chosen code from 'self'.
+ */
+$headerCSP = "Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'self';";
 
 header($headerCSP);
 
 ?>
 <?php
-if (isset ($_POST['include'])) {
+if (isset ($_POST['include']) && is_string ($_POST['include'])) {
 $page[ 'body' ] .= "
-	" . $_POST['include'] . "
+	" . htmlspecialchars($_POST['include'], ENT_QUOTES, 'UTF-8') . "
 ";
 }
 $page[ 'body' ] .= '

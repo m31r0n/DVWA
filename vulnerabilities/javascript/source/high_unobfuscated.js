@@ -520,7 +520,8 @@
 function do_something(e){for(var t="",n=e.length-1;n>=0;n--)t+=e[n];return t}
 
 function token_part_3(t, y="ZZ") {
-	document.getElementById("token").value=sha256(document.getElementById("token").value+y)
+	// The token is bound to the single-use nonce issued by the server with this form
+	document.getElementById("token").value=sha256(document.getElementById("token").value+y+document.getElementById("nonce").value)
 }
 
 function token_part_2(e="YY") {

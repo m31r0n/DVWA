@@ -12,7 +12,8 @@ $page[ 'help_button' ]   = 'brute';
 $page[ 'source_button' ] = 'brute';
 dvwaDatabaseConnect();
 
-$method            = 'GET';
+// Credentials are always sent in the body of a POST request
+$method            = 'POST';
 $vulnerabilityFile = '';
 switch( dvwaSecurityLevelGet() ) {
 	case 'low':
@@ -26,7 +27,6 @@ switch( dvwaSecurityLevelGet() ) {
 		break;
 	default:
 		$vulnerabilityFile = 'impossible.php';
-		$method = 'POST';
 		break;
 }
 
@@ -47,8 +47,8 @@ $page[ 'body' ] .= "
 			<br />
 			<input type=\"submit\" value=\"Login\" name=\"Login\">\n";
 
-if( $vulnerabilityFile == 'high.php' || $vulnerabilityFile == 'impossible.php' )
-	$page[ 'body' ] .= "			" . tokenField();
+// Every level requires the anti-CSRF token
+$page[ 'body' ] .= "			" . tokenField();
 
 $page[ 'body' ] .= "
 		</form>
